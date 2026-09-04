@@ -72,7 +72,8 @@ print(f"FAISS index contains {index.ntotal} vectors")
 questions = [
     "What is an algorithm?",
     "Why is algorithm efficiency important?",
-    "What is the difference between linear search and binary search?"
+    "What is the difference between linear search and binary search?",
+    "What is quantum computing?"
 ]
 
 
