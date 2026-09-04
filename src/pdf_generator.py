@@ -16,7 +16,8 @@ QUESTION_STYLE = ParagraphStyle("QuestionCustom", parent=styles["Heading2"], fon
 QUESTION_TEXT_STYLE = ParagraphStyle("QuestionTextCustom", parent=styles["BodyText"], fontSize=9.5, leading=12.5, spaceAfter=2 * mm)
 SECTION_STYLE = ParagraphStyle("SectionCustom", parent=styles["Heading3"], fontSize=10.5, leading=13, spaceBefore=1.5 * mm, spaceAfter=1 * mm, keepWithNext=True)
 SUBPART_STYLE = ParagraphStyle("SubpartCustom", parent=styles["BodyText"], fontSize=10, leading=13, spaceBefore=1.5 * mm, spaceAfter=1.2 * mm, keepWithNext=True)
-BULLET_STYLE = ParagraphStyle("BulletCustom", parent=styles["BodyText"], fontSize=9.5, leading=12.5, leftIndent=5 * mm, firstLineIndent=-3 * mm, spaceAfter=1.1 * mm)
+BODY_STYLE = ParagraphStyle("BodyCustom", parent=styles["BodyText"], fontSize=9.5, leading=12.5, spaceAfter=1.2 * mm)
+BULLET_STYLE = ParagraphStyle("BulletCustom", parent=BODY_STYLE, fontSize=9.5, leading=12.5, leftIndent=5 * mm, firstLineIndent=-3 * mm, spaceAfter=1.1 * mm)
 SOURCE_STYLE = ParagraphStyle("SourceCustom", parent=styles["BodyText"], fontSize=8.5, leading=10.5, leftIndent=4 * mm, spaceAfter=0.6 * mm, textColor=colors.HexColor("#444444"))
 EVIDENCE_STYLE = ParagraphStyle("EvidenceCustom", parent=styles["BodyText"], fontSize=8.5, leading=10.5, leftIndent=4 * mm, rightIndent=2 * mm, spaceAfter=1.2 * mm)
 META_STYLE = ParagraphStyle("MetaCustom", parent=styles["BodyText"], fontSize=8.5, leading=10.5, spaceAfter=1 * mm)
@@ -31,12 +32,8 @@ def _escape_text(text):
 def _clean_display_text(text):
     """Clean OCR/PDF extraction artifacts for presentation only."""
     value = str(text or "")
-
-    # Decorative/OCR glyphs that should never appear in the answer document.
     for glyph in ("■", "▪", "•", "◆", "❖", "❧", "●", "€"):
         value = value.replace(glyph, "")
-
-    # Embedded headers/footers copied from the source notes.
     value = re.sub(r"\b(?:AIMIT/SAP|IT3IPHC504|IT3IPSC521|IT3IPHC)\S*[^.]*?\bPage\s+\d+\b", "", value, flags=re.I)
     value = re.sub(r"\bPage\s+\d+\b", "", value, flags=re.I)
     value = re.sub(r"\s+", " ", value).strip()
@@ -46,7 +43,6 @@ def _clean_display_text(text):
 def _clean_question(text):
     value = _clean_display_text(text)
     value = re.sub(r"\s*\(\s*\d+\s*\)", "", value)
-    # Remove leaked exam instructions/section headings from OCR text.
     value = re.sub(r"\s+(?:PART|SECTION)\s*[- ]?[A-ZIV]+\s+Answer any.*$", "", value, flags=re.I)
     return value.strip()
 
@@ -55,30 +51,21 @@ def _format_answer(answer):
     """Turn extracted evidence into a clean exam-style hierarchy."""
     flowables = []
     lines = [x.strip() for x in str(answer or "").splitlines() if x.strip()]
-    current_subpart = None
-
     for raw in lines:
         line = _clean_display_text(raw)
         if not line:
             continue
         line = re.sub(r"^[\-–—*]+\s*", "", line).strip()
-
-        # Answers produced for multipart questions are grouped under a/b/c.
         match = re.match(r"^([a-hA-H])\)\s*(.*)$", line)
         if match:
             label, content = match.groups()
-            current_subpart = label.lower()
-            flowables.append(Paragraph(f"<b>{current_subpart})</b> {_escape_text(content)}", SUBPART_STYLE))
+            flowables.append(Paragraph(f"<b>{label.lower()})</b> {_escape_text(content)}", SUBPART_STYLE))
             continue
-
         if line.startswith("### ") or line.startswith("## "):
             heading = re.sub(r"^#{2,3}\s*", "", line)
             flowables.append(Paragraph(f"<b>{_escape_text(heading)}</b>", SECTION_STYLE))
             continue
-
-        # Every extracted evidence sentence becomes one visually distinct point.
         flowables.append(Paragraph(f"• {_escape_text(line)}", BULLET_STYLE))
-
     return flowables
 
 
@@ -127,25 +114,20 @@ def generate_answers_pdf(results, output_path="output/answers.pdf"):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     document = _document(output_path, "RAG Study Assistant - Answers")
-
     story = [
         Paragraph("RAG Study Assistant", TITLE_STYLE),
         Paragraph("Generated Answers", SUBTITLE_STYLE),
     ]
-
     for number, result in enumerate(results, start=1):
         story.append(_question_header(number, result.get("question", "")))
         story.extend(_format_answer(result.get("answer", "")))
-
         sources = result.get("sources", [])
         if sources:
             story.append(Paragraph("Sources", SECTION_STYLE))
             story.extend(_sources_flowables(sources))
-
         if number < len(results):
             story.append(Spacer(1, 1.5 * mm))
             story.append(HRFlowable(width="100%", thickness=0.4, color=colors.lightgrey, spaceBefore=0.5 * mm, spaceAfter=0.5 * mm))
-
     document.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
     return str(output_path)
 
@@ -155,16 +137,13 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     document = _document(output_path, "RAG Study Assistant - Source Mapping")
-
     story = [
         Paragraph("RAG Study Assistant", TITLE_STYLE),
         Paragraph("Source Mapping", SUBTITLE_STYLE),
     ]
-
     for number, result in enumerate(results, start=1):
         story.append(_question_header(number, result.get("question", "")))
         sources = result.get("sources", [])
-
         if not sources:
             story.append(Paragraph("No source evidence was used.", BODY_STYLE))
         else:
@@ -174,7 +153,6 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
                 relevance = source.get("relevance")
                 distance_text = f"{distance:.4f}" if isinstance(distance, (int, float)) else _escape_text(distance)
                 relevance_text = f"{relevance:.4f}" if isinstance(relevance, (int, float)) else _escape_text(relevance)
-
                 block = [
                     Paragraph(f"Evidence {source_number}", SECTION_STYLE),
                     Paragraph(
@@ -189,10 +167,8 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
                     Paragraph(_escape_text(_clean_display_text(source.get("text", ""))), EVIDENCE_STYLE),
                 ]
                 story.append(KeepTogether(block))
-
         if number < len(results):
             story.append(Spacer(1, 1.5 * mm))
             story.append(HRFlowable(width="100%", thickness=0.4, color=colors.lightgrey, spaceBefore=0.5 * mm, spaceAfter=0.5 * mm))
-
     document.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
     return str(output_path)
