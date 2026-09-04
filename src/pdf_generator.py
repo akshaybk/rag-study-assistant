@@ -13,10 +13,6 @@ from reportlab.platypus import (
 )
 
 
-# =========================
-# STYLES
-# =========================
-
 styles = getSampleStyleSheet()
 
 TITLE_STYLE = ParagraphStyle(
@@ -57,15 +53,10 @@ EVIDENCE_STYLE = ParagraphStyle(
 )
 
 
-# =========================
-# HELPERS
-# =========================
-
 def _escape_text(text):
     """Escape text so it can safely be used in a ReportLab Paragraph."""
     if text is None:
         return ""
-
     return (
         str(text)
         .replace("&", "&amp;")
@@ -80,27 +71,23 @@ def _format_answer(answer):
 
     for raw_line in str(answer).splitlines():
         line = raw_line.strip()
-
         if not line:
             flowables.append(Spacer(1, 2 * mm))
             continue
 
         if line.startswith("### "):
-            heading = _escape_text(line[4:])
-            flowables.append(Paragraph(f"<b>{heading}</b>", QUESTION_STYLE))
+            flowables.append(
+                Paragraph(f"<b>{_escape_text(line[4:])}</b>", QUESTION_STYLE)
+            )
             continue
 
         if line.startswith("## "):
-            heading = _escape_text(line[3:])
-            flowables.append(Paragraph(f"<b>{heading}</b>", QUESTION_STYLE))
+            flowables.append(
+                Paragraph(f"<b>{_escape_text(line[3:])}</b>", QUESTION_STYLE)
+            )
             continue
 
         if line.startswith("- ") or line.startswith("* "):
-            bullet = _escape_text(line[2:])
-            flowables.append(Paragraph(f"• {bullet}", BODY_STYLE))
-            continue
-
-        if len(line) > 2 and line[0].isdigit() and line[1:3] == ". ":
             flowables.append(Paragraph(_escape_text(line), BODY_STYLE))
             continue
 
@@ -109,13 +96,8 @@ def _format_answer(answer):
     return flowables
 
 
-# =========================
-# ANSWERS PDF
-# =========================
-
 def generate_answers_pdf(results, output_path="output/answers.pdf"):
     """Generate an exam-ready Answers PDF from RAG results."""
-
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -135,28 +117,23 @@ def generate_answers_pdf(results, output_path="output/answers.pdf"):
     ]
 
     for number, result in enumerate(results, start=1):
-        question = _escape_text(result.get("question", ""))
-
         question_block = [
             Paragraph(f"Question {number}", QUESTION_STYLE),
-            Paragraph(question, BODY_STYLE),
+            Paragraph(_escape_text(result.get("question", "")), BODY_STYLE),
             Paragraph("Answer", QUESTION_STYLE),
         ]
-
         question_block.extend(_format_answer(result.get("answer", "")))
 
         source_keys = set()
         source_lines = []
-
         for source in result.get("sources", []):
             key = (source.get("file"), source.get("page"))
             if key in source_keys:
                 continue
-
             source_keys.add(key)
             filename = Path(str(source.get("file", ""))).name
             source_lines.append(
-                f"• {_escape_text(filename)} — Page {source.get('page', '')}"
+                f"- {_escape_text(filename)} — Page {source.get('page', '')}"
             )
 
         if source_lines:
@@ -174,13 +151,8 @@ def generate_answers_pdf(results, output_path="output/answers.pdf"):
     return str(output_path)
 
 
-# =========================
-# SOURCE MAPPING PDF
-# =========================
-
 def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"):
-    """Generate a Source Mapping PDF showing retrieved evidence."""
-
+    """Generate a Source Mapping PDF showing exact answer evidence."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -200,17 +172,13 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
     ]
 
     for number, result in enumerate(results, start=1):
-        question = _escape_text(result.get("question", ""))
-
         story.append(Paragraph(f"Question {number}", QUESTION_STYLE))
-        story.append(Paragraph(question, BODY_STYLE))
+        story.append(Paragraph(_escape_text(result.get("question", "")), BODY_STYLE))
 
         sources = result.get("sources", [])
-
         if not sources:
-            story.append(
-                Paragraph("No source evidence was retrieved.", BODY_STYLE)
-            )
+            story.append(Paragraph("No source evidence was used.", BODY_STYLE))
+            story.append(PageBreak())
             continue
 
         for source_number, source in enumerate(sources, start=1):
@@ -220,20 +188,19 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
             source_type = source.get("source_type", "unknown")
             distance = source.get("distance")
             relevance = source.get("relevance")
-            evidence = _escape_text(source.get("text", ""))
+            evidence = source.get("text", "")
 
-            if isinstance(distance, (int, float)):
-                distance_text = f"{distance:.4f}"
-            else:
-                distance_text = _escape_text(distance)
-
-            if isinstance(relevance, (int, float)):
-                relevance_text = f"{relevance:.4f}"
-            else:
-                relevance_text = _escape_text(relevance)
+            distance_text = (
+                f"{distance:.4f}" if isinstance(distance, (int, float))
+                else _escape_text(distance)
+            )
+            relevance_text = (
+                f"{relevance:.4f}" if isinstance(relevance, (int, float))
+                else _escape_text(relevance)
+            )
 
             block = [
-                Paragraph(f"<b>Source {source_number}</b>", QUESTION_STYLE),
+                Paragraph(f"<b>Evidence {source_number}</b>", QUESTION_STYLE),
                 Paragraph(
                     f"<b>File:</b> {_escape_text(filename)}<br/>"
                     f"<b>Source type:</b> {_escape_text(source_type)}<br/>"
@@ -243,10 +210,9 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
                     f"<b>Relevance:</b> {relevance_text}",
                     SOURCE_STYLE,
                 ),
-                Paragraph("<b>Retrieved Evidence</b>", SOURCE_STYLE),
-                Paragraph(evidence, EVIDENCE_STYLE),
+                Paragraph("<b>Exact Answer Evidence</b>", SOURCE_STYLE),
+                Paragraph(_escape_text(evidence), EVIDENCE_STYLE),
             ]
-
             story.append(KeepTogether(block))
 
         story.append(PageBreak())
