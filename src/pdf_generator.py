@@ -85,7 +85,6 @@ def _format_answer(answer):
             flowables.append(Spacer(1, 2 * mm))
             continue
 
-        # Markdown headings
         if line.startswith("### "):
             heading = _escape_text(line[4:])
             flowables.append(Paragraph(f"<b>{heading}</b>", QUESTION_STYLE))
@@ -96,13 +95,11 @@ def _format_answer(answer):
             flowables.append(Paragraph(f"<b>{heading}</b>", QUESTION_STYLE))
             continue
 
-        # Markdown bullets
         if line.startswith("- ") or line.startswith("* "):
             bullet = _escape_text(line[2:])
             flowables.append(Paragraph(f"• {bullet}", BODY_STYLE))
             continue
 
-        # Numbered list items
         if len(line) > 2 and line[0].isdigit() and line[1:3] == ". ":
             flowables.append(Paragraph(_escape_text(line), BODY_STYLE))
             continue
@@ -117,14 +114,7 @@ def _format_answer(answer):
 # =========================
 
 def generate_answers_pdf(results, output_path="output/answers.pdf"):
-    """
-    Generate an exam-ready Answers PDF from RAG results.
-
-    Each result should contain:
-        question
-        answer
-        sources
-    """
+    """Generate an exam-ready Answers PDF from RAG results."""
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -155,7 +145,6 @@ def generate_answers_pdf(results, output_path="output/answers.pdf"):
 
         question_block.extend(_format_answer(result.get("answer", "")))
 
-        # Show unique source file/page combinations.
         source_keys = set()
         source_lines = []
 
@@ -178,12 +167,10 @@ def generate_answers_pdf(results, output_path="output/answers.pdf"):
         story.extend(question_block)
         story.append(PageBreak())
 
-    # Remove the final unnecessary page break.
     if story and isinstance(story[-1], PageBreak):
         story.pop()
 
     document.build(story)
-
     return str(output_path)
 
 
@@ -192,10 +179,7 @@ def generate_answers_pdf(results, output_path="output/answers.pdf"):
 # =========================
 
 def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"):
-    """
-    Generate a Source Mapping PDF showing the retrieved evidence
-    used for each generated answer.
-    """
+    """Generate a Source Mapping PDF showing retrieved evidence."""
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -225,10 +209,7 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
 
         if not sources:
             story.append(
-                Paragraph(
-                    "No source evidence was retrieved.",
-                    BODY_STYLE,
-                )
+                Paragraph("No source evidence was retrieved.", BODY_STYLE)
             )
             continue
 
@@ -236,7 +217,9 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
             filename = Path(str(source.get("file", ""))).name
             page = source.get("page", "")
             chunk_id = source.get("chunk_id", "")
+            source_type = source.get("source_type", "unknown")
             distance = source.get("distance")
+            relevance = source.get("relevance")
             evidence = _escape_text(source.get("text", ""))
 
             if isinstance(distance, (int, float)):
@@ -244,13 +227,20 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
             else:
                 distance_text = _escape_text(distance)
 
+            if isinstance(relevance, (int, float)):
+                relevance_text = f"{relevance:.4f}"
+            else:
+                relevance_text = _escape_text(relevance)
+
             block = [
                 Paragraph(f"<b>Source {source_number}</b>", QUESTION_STYLE),
                 Paragraph(
                     f"<b>File:</b> {_escape_text(filename)}<br/>"
+                    f"<b>Source type:</b> {_escape_text(source_type)}<br/>"
                     f"<b>Page:</b> {_escape_text(page)}<br/>"
                     f"<b>Chunk:</b> {_escape_text(chunk_id)}<br/>"
-                    f"<b>FAISS distance:</b> {distance_text}",
+                    f"<b>FAISS distance:</b> {distance_text}<br/>"
+                    f"<b>Relevance:</b> {relevance_text}",
                     SOURCE_STYLE,
                 ),
                 Paragraph("<b>Retrieved Evidence</b>", SOURCE_STYLE),
@@ -265,5 +255,4 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
         story.pop()
 
     document.build(story)
-
     return str(output_path)
