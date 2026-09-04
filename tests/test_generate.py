@@ -15,6 +15,7 @@ class FakeEmbeddingModel:
                 float("finite" in lowered),
                 float("binary" in lowered),
                 float("linear" in lowered),
+                float("structure" in lowered),
                 float("unrelated" in lowered),
             ], dtype="float32")
             norm = np.linalg.norm(vector)
