@@ -3,6 +3,10 @@ from src.chunker import chunk_pages
 from src.embeddings import create_embeddings
 from src.vector_store import create_vector_store
 from src.rag_pipeline import answer_question
+from src.pdf_generator import (
+    generate_answers_pdf,
+    generate_source_mapping_pdf,
+)
 
 
 PDF_PATH = "data/notes.pdf"
@@ -94,7 +98,23 @@ for number, question in enumerate(questions, start=1):
 
 
 # =========================
-# 7. SUMMARY
+# 7. GENERATE PDF REPORTS
+# =========================
+
+answers_pdf = generate_answers_pdf(all_results)
+source_mapping_pdf = generate_source_mapping_pdf(all_results)
+
+print("\n")
+print("=" * 70)
+print("PDF REPORTS GENERATED")
+print("=" * 70)
+
+print(f"Answers PDF: {answers_pdf}")
+print(f"Source Mapping PDF: {source_mapping_pdf}")
+
+
+# =========================
+# 8. SUMMARY
 # =========================
 
 print("\n")
