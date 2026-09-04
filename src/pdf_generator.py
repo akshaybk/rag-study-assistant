@@ -1,154 +1,88 @@
 from pathlib import Path
+import re
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    KeepTogether,
-    Table,
-    TableStyle,
-)
-
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, KeepTogether, HRFlowable
 
 styles = getSampleStyleSheet()
 
-TITLE_STYLE = ParagraphStyle(
-    "TitleCustom",
-    parent=styles["Title"],
-    alignment=TA_CENTER,
-    fontSize=18,
-    leading=22,
-    spaceAfter=2 * mm,
-)
-
-SUBTITLE_STYLE = ParagraphStyle(
-    "SubtitleCustom",
-    parent=styles["BodyText"],
-    alignment=TA_CENTER,
-    fontSize=9.5,
-    leading=12,
-    textColor=colors.grey,
-    spaceAfter=7 * mm,
-)
-
-QUESTION_STYLE = ParagraphStyle(
-    "QuestionCustom",
-    parent=styles["Heading2"],
-    fontSize=11.5,
-    leading=14,
-    spaceBefore=3 * mm,
-    spaceAfter=1.5 * mm,
-    keepWithNext=True,
-)
-
-SECTION_STYLE = ParagraphStyle(
-    "SectionCustom",
-    parent=styles["Heading3"],
-    fontSize=10,
-    leading=12,
-    spaceBefore=2 * mm,
-    spaceAfter=1 * mm,
-    keepWithNext=True,
-)
-
-QUESTION_TEXT_STYLE = ParagraphStyle(
-    "QuestionTextCustom",
-    parent=styles["BodyText"],
-    fontSize=9.5,
-    leading=12.5,
-    spaceAfter=2.5 * mm,
-)
-
-BODY_STYLE = ParagraphStyle(
-    "BodyCustom",
-    parent=styles["BodyText"],
-    fontSize=9.5,
-    leading=13,
-    spaceAfter=1.8 * mm,
-)
-
-BULLET_STYLE = ParagraphStyle(
-    "BulletCustom",
-    parent=BODY_STYLE,
-    leftIndent=5 * mm,
-    firstLineIndent=-3 * mm,
-    spaceAfter=1.2 * mm,
-)
-
-SOURCE_STYLE = ParagraphStyle(
-    "SourceCustom",
-    parent=styles["BodyText"],
-    fontSize=8.5,
-    leading=11,
-    leftIndent=3 * mm,
-    spaceAfter=0.8 * mm,
-)
-
-EVIDENCE_STYLE = ParagraphStyle(
-    "EvidenceCustom",
-    parent=styles["BodyText"],
-    fontSize=8.5,
-    leading=11,
-    leftIndent=4 * mm,
-    rightIndent=2 * mm,
-    spaceAfter=1.5 * mm,
-)
-
-MAPPING_META_STYLE = ParagraphStyle(
-    "MappingMetaCustom",
-    parent=styles["BodyText"],
-    fontSize=8.5,
-    leading=11,
-    spaceAfter=1.5 * mm,
-)
+TITLE_STYLE = ParagraphStyle("TitleCustom", parent=styles["Title"], alignment=TA_CENTER, fontSize=18, leading=21, spaceAfter=2 * mm)
+SUBTITLE_STYLE = ParagraphStyle("SubtitleCustom", parent=styles["BodyText"], alignment=TA_CENTER, fontSize=9.5, leading=12, textColor=colors.grey, spaceAfter=5 * mm)
+QUESTION_STYLE = ParagraphStyle("QuestionCustom", parent=styles["Heading2"], fontSize=12, leading=14.5, spaceBefore=3 * mm, spaceAfter=1.5 * mm, keepWithNext=True)
+QUESTION_TEXT_STYLE = ParagraphStyle("QuestionTextCustom", parent=styles["BodyText"], fontSize=9.5, leading=12.5, spaceAfter=2 * mm)
+SECTION_STYLE = ParagraphStyle("SectionCustom", parent=styles["Heading3"], fontSize=10.5, leading=13, spaceBefore=1.5 * mm, spaceAfter=1 * mm, keepWithNext=True)
+SUBPART_STYLE = ParagraphStyle("SubpartCustom", parent=styles["BodyText"], fontSize=10, leading=13, spaceBefore=1.5 * mm, spaceAfter=1.2 * mm, keepWithNext=True)
+BULLET_STYLE = ParagraphStyle("BulletCustom", parent=styles["BodyText"], fontSize=9.5, leading=12.5, leftIndent=5 * mm, firstLineIndent=-3 * mm, spaceAfter=1.1 * mm)
+SOURCE_STYLE = ParagraphStyle("SourceCustom", parent=styles["BodyText"], fontSize=8.5, leading=10.5, leftIndent=4 * mm, spaceAfter=0.6 * mm, textColor=colors.HexColor("#444444"))
+EVIDENCE_STYLE = ParagraphStyle("EvidenceCustom", parent=styles["BodyText"], fontSize=8.5, leading=10.5, leftIndent=4 * mm, rightIndent=2 * mm, spaceAfter=1.2 * mm)
+META_STYLE = ParagraphStyle("MetaCustom", parent=styles["BodyText"], fontSize=8.5, leading=10.5, spaceAfter=1 * mm)
 
 
 def _escape_text(text):
-    """Escape text so it can safely be used in a ReportLab Paragraph."""
     if text is None:
         return ""
-    return (
-        str(text)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _clean_display_text(text):
+    """Clean OCR/PDF extraction artifacts for presentation only."""
+    value = str(text or "")
+
+    # Decorative/OCR glyphs that should never appear in the answer document.
+    for glyph in ("■", "▪", "•", "◆", "❖", "❧", "●", "€"):
+        value = value.replace(glyph, "")
+
+    # Embedded headers/footers copied from the source notes.
+    value = re.sub(r"\b(?:AIMIT/SAP|IT3IPHC504|IT3IPSC521|IT3IPHC)\S*[^.]*?\bPage\s+\d+\b", "", value, flags=re.I)
+    value = re.sub(r"\bPage\s+\d+\b", "", value, flags=re.I)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value.strip(" -:;,.–—")
+
+
+def _clean_question(text):
+    value = _clean_display_text(text)
+    value = re.sub(r"\s*\(\s*\d+\s*\)", "", value)
+    # Remove leaked exam instructions/section headings from OCR text.
+    value = re.sub(r"\s+(?:PART|SECTION)\s*[- ]?[A-ZIV]+\s+Answer any.*$", "", value, flags=re.I)
+    return value.strip()
 
 
 def _format_answer(answer):
-    """Convert simple Markdown-style answer text into compact PDF flowables."""
+    """Turn extracted evidence into a clean exam-style hierarchy."""
     flowables = []
+    lines = [x.strip() for x in str(answer or "").splitlines() if x.strip()]
+    current_subpart = None
 
-    for raw_line in str(answer).splitlines():
-        line = raw_line.strip()
+    for raw in lines:
+        line = _clean_display_text(raw)
         if not line:
             continue
+        line = re.sub(r"^[\-–—*]+\s*", "", line).strip()
 
-        if line.startswith("### "):
-            flowables.append(Paragraph(_escape_text(line[4:]), SECTION_STYLE))
+        # Answers produced for multipart questions are grouped under a/b/c.
+        match = re.match(r"^([a-hA-H])\)\s*(.*)$", line)
+        if match:
+            label, content = match.groups()
+            current_subpart = label.lower()
+            flowables.append(Paragraph(f"<b>{current_subpart})</b> {_escape_text(content)}", SUBPART_STYLE))
             continue
 
-        if line.startswith("## "):
-            flowables.append(Paragraph(_escape_text(line[3:]), SECTION_STYLE))
+        if line.startswith("### ") or line.startswith("## "):
+            heading = re.sub(r"^#{2,3}\s*", "", line)
+            flowables.append(Paragraph(f"<b>{_escape_text(heading)}</b>", SECTION_STYLE))
             continue
 
-        if line.startswith("- ") or line.startswith("* "):
-            text = _escape_text(line[2:].strip())
-            flowables.append(Paragraph(f"• {text}", BULLET_STYLE))
-            continue
-
-        flowables.append(Paragraph(_escape_text(line), BODY_STYLE))
+        # Every extracted evidence sentence becomes one visually distinct point.
+        flowables.append(Paragraph(f"• {_escape_text(line)}", BULLET_STYLE))
 
     return flowables
 
 
 def _page_footer(canvas, document):
-    """Draw a small page number without consuming layout space."""
     canvas.saveState()
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(colors.grey)
@@ -158,40 +92,38 @@ def _page_footer(canvas, document):
 
 def _document(output_path, title):
     return SimpleDocTemplate(
-        str(output_path),
-        pagesize=A4,
-        rightMargin=16 * mm,
-        leftMargin=16 * mm,
-        topMargin=14 * mm,
-        bottomMargin=14 * mm,
-        title=title,
-        author="RAG Study Assistant",
+        str(output_path), pagesize=A4,
+        rightMargin=16 * mm, leftMargin=16 * mm,
+        topMargin=13 * mm, bottomMargin=14 * mm,
+        title=title, author="RAG Study Assistant",
     )
 
 
 def _sources_flowables(sources):
-    """Create a compact source list, de-duplicated by file and page."""
-    source_keys = set()
     flowables = []
-
+    seen = set()
     for source in sources:
         key = (source.get("file"), source.get("page"))
-        if key in source_keys:
+        if key in seen:
             continue
-        source_keys.add(key)
+        seen.add(key)
         filename = Path(str(source.get("file", ""))).name
-        flowables.append(
-            Paragraph(
-                f"• {_escape_text(filename)} — Page {_escape_text(source.get('page', ''))}",
-                SOURCE_STYLE,
-            )
-        )
-
+        flowables.append(Paragraph(
+            f"• {_escape_text(filename)} — Page {_escape_text(source.get('page', ''))}", SOURCE_STYLE
+        ))
     return flowables
 
 
+def _question_header(number, question):
+    return KeepTogether([
+        Paragraph(f"Question {number}", QUESTION_STYLE),
+        Paragraph(_escape_text(_clean_question(question)), QUESTION_TEXT_STYLE),
+        Paragraph("Answer", SECTION_STYLE),
+    ])
+
+
 def generate_answers_pdf(results, output_path="output/answers.pdf"):
-    """Generate a compact, exam-ready Answers PDF from RAG results."""
+    """Generate a compact, clean, organized exam-answer PDF."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     document = _document(output_path, "RAG Study Assistant - Answers")
@@ -202,46 +134,24 @@ def generate_answers_pdf(results, output_path="output/answers.pdf"):
     ]
 
     for number, result in enumerate(results, start=1):
-        question = result.get("question", "")
-        answer = result.get("answer", "")
-
-        # Keep only the question heading and question text together. The answer
-        # is allowed to flow naturally across pages instead of forcing a whole
-        # question onto one page.
-        story.append(
-            KeepTogether([
-                Paragraph(f"Question {number}", QUESTION_STYLE),
-                Paragraph(_escape_text(question), QUESTION_TEXT_STYLE),
-                Paragraph("Answer", SECTION_STYLE),
-            ])
-        )
-        story.extend(_format_answer(answer))
+        story.append(_question_header(number, result.get("question", "")))
+        story.extend(_format_answer(result.get("answer", "")))
 
         sources = result.get("sources", [])
         if sources:
             story.append(Paragraph("Sources", SECTION_STYLE))
             story.extend(_sources_flowables(sources))
 
-        # Small separator instead of a page break. This removes the large blank
-        # areas caused by forcing every question onto a new page.
-        story.append(Spacer(1, 2.5 * mm))
-        story.append(
-            Table(
-                [[""]],
-                colWidths=[178 * mm],
-                rowHeights=[0.25 * mm],
-                style=TableStyle([
-                    ("LINEBELOW", (0, 0), (-1, -1), 0.35, colors.lightgrey),
-                ]),
-            )
-        )
+        if number < len(results):
+            story.append(Spacer(1, 1.5 * mm))
+            story.append(HRFlowable(width="100%", thickness=0.4, color=colors.lightgrey, spaceBefore=0.5 * mm, spaceAfter=0.5 * mm))
 
     document.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
     return str(output_path)
 
 
 def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"):
-    """Generate a compact Source Mapping PDF showing exact answer evidence."""
+    """Generate a compact source map while cleaning display-only OCR artifacts."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     document = _document(output_path, "RAG Study Assistant - Source Mapping")
@@ -252,59 +162,37 @@ def generate_source_mapping_pdf(results, output_path="output/source_mapping.pdf"
     ]
 
     for number, result in enumerate(results, start=1):
-        story.append(Paragraph(f"Question {number}", QUESTION_STYLE))
-        story.append(Paragraph(_escape_text(result.get("question", "")), QUESTION_TEXT_STYLE))
-
+        story.append(_question_header(number, result.get("question", "")))
         sources = result.get("sources", [])
+
         if not sources:
             story.append(Paragraph("No source evidence was used.", BODY_STYLE))
-            story.append(Spacer(1, 2 * mm))
-            continue
+        else:
+            for source_number, source in enumerate(sources, start=1):
+                filename = Path(str(source.get("file", ""))).name
+                distance = source.get("distance")
+                relevance = source.get("relevance")
+                distance_text = f"{distance:.4f}" if isinstance(distance, (int, float)) else _escape_text(distance)
+                relevance_text = f"{relevance:.4f}" if isinstance(relevance, (int, float)) else _escape_text(relevance)
 
-        for source_number, source in enumerate(sources, start=1):
-            filename = Path(str(source.get("file", ""))).name
-            page = source.get("page", "")
-            chunk_id = source.get("chunk_id", "")
-            source_type = source.get("source_type", "unknown")
-            distance = source.get("distance")
-            relevance = source.get("relevance")
-            evidence = source.get("text", "")
+                block = [
+                    Paragraph(f"Evidence {source_number}", SECTION_STYLE),
+                    Paragraph(
+                        f"<b>File:</b> {_escape_text(filename)} &nbsp; | &nbsp; "
+                        f"<b>Page:</b> {_escape_text(source.get('page', ''))} &nbsp; | &nbsp; "
+                        f"<b>Chunk:</b> {_escape_text(source.get('chunk_id', ''))}<br/>"
+                        f"<b>Source type:</b> {_escape_text(source.get('source_type', 'unknown'))} &nbsp; | &nbsp; "
+                        f"<b>FAISS distance:</b> {distance_text} &nbsp; | &nbsp; "
+                        f"<b>Relevance:</b> {relevance_text}", META_STYLE,
+                    ),
+                    Paragraph("<b>Exact Answer Evidence</b>", SOURCE_STYLE),
+                    Paragraph(_escape_text(_clean_display_text(source.get("text", ""))), EVIDENCE_STYLE),
+                ]
+                story.append(KeepTogether(block))
 
-            distance_text = (
-                f"{distance:.4f}" if isinstance(distance, (int, float)) else _escape_text(distance)
-            )
-            relevance_text = (
-                f"{relevance:.4f}" if isinstance(relevance, (int, float)) else _escape_text(relevance)
-            )
-
-            meta = (
-                f"<b>File:</b> {_escape_text(filename)} &nbsp; | &nbsp; "
-                f"<b>Page:</b> {_escape_text(page)} &nbsp; | &nbsp; "
-                f"<b>Chunk:</b> {_escape_text(chunk_id)}<br/>"
-                f"<b>Source type:</b> {_escape_text(source_type)} &nbsp; | &nbsp; "
-                f"<b>FAISS distance:</b> {distance_text} &nbsp; | &nbsp; "
-                f"<b>Relevance:</b> {relevance_text}"
-            )
-
-            block = [
-                Paragraph(f"Evidence {source_number}", SECTION_STYLE),
-                Paragraph(meta, MAPPING_META_STYLE),
-                Paragraph("<b>Exact Answer Evidence</b>", MAPPING_META_STYLE),
-                Paragraph(_escape_text(evidence), EVIDENCE_STYLE),
-            ]
-            story.append(KeepTogether(block))
-
-        story.append(Spacer(1, 2.5 * mm))
-        story.append(
-            Table(
-                [[""]],
-                colWidths=[178 * mm],
-                rowHeights=[0.25 * mm],
-                style=TableStyle([
-                    ("LINEBELOW", (0, 0), (-1, -1), 0.35, colors.lightgrey),
-                ]),
-            )
-        )
+        if number < len(results):
+            story.append(Spacer(1, 1.5 * mm))
+            story.append(HRFlowable(width="100%", thickness=0.4, color=colors.lightgrey, spaceBefore=0.5 * mm, spaceAfter=0.5 * mm))
 
     document.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
     return str(output_path)
