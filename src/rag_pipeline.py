@@ -6,6 +6,9 @@ def answer_question(question, index, chunks, top_k=3):
     """
     Retrieve relevant chunks and generate an answer
     for a single question.
+
+    Returns the generated answer together with the
+    retrieved source evidence used to build the context.
     """
 
     # =========================
@@ -59,7 +62,8 @@ PAGE: {result['page']}
             "file": result["source"],
             "page": result["page"],
             "chunk_id": result["chunk_id"],
-            "distance": result["distance"]
+            "distance": result["distance"],
+            "text": result["text"]
         }
 
         sources.append(source)
