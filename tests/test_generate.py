@@ -175,8 +175,8 @@ def test_multi_part_question_is_answered_independently(monkeypatch):
 def test_split_subquestions():
     question = "a) What is a prime number? (6) b) Explain a dictionary. (6)"
     assert generate.split_subquestions(question) == [
-        ("a", "What is a prime number? (6)"),
-        ("b", "Explain a dictionary. (6)"),
+        ("a", "What is a prime number?"),
+        ("b", "Explain a dictionary."),
     ]
 
 
