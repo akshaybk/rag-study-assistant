@@ -60,12 +60,26 @@ def chunk_pages(pages, chunk_size=500, overlap=100):
     chunk_id = 0
 
     for page in pages:
-        text = page["text"]
-        source_type = _detect_source_type(text)
-        units = _split_units(text)
-
+        source_type = _detect_source_type(page["text"])
+        units = _split_units(page["text"])
         start = 0
+
         while start < len(units):
+            # A single oversized unit (usually a long extracted table row)
+            # cannot respect the normal boundary-based chunking strategy.
+            if len(units[start]) > chunk_size:
+                for piece in _hard_split(units[start], chunk_size):
+                    chunks.append({
+                        "chunk_id": chunk_id,
+                        "text": piece,
+                        "page": page["page"],
+                        "source": page["source"],
+                        "source_type": source_type,
+                    })
+                    chunk_id += 1
+                start += 1
+                continue
+
             current = []
             current_length = 0
             cursor = start
@@ -78,25 +92,11 @@ def chunk_pages(pages, chunk_size=500, overlap=100):
                 if current and proposed_length > chunk_size:
                     break
 
-                if not current and len(unit) > chunk_size:
-                    # Preserve the fallback behavior for unusually long table
-                    # rows or extraction fragments.
-                    current = _hard_split(unit, chunk_size)
-                    cursor += 1
-                    break
-
                 current.append(unit)
                 current_length = proposed_length
                 cursor += 1
 
-            if not current:
-                break
-
-            if isinstance(current[0], str) and len(current) == 1 and len(current[0]) > chunk_size:
-                chunk_text = current[0]
-            else:
-                chunk_text = " ".join(current)
-
+            chunk_text = " ".join(current)
             chunks.append({
                 "chunk_id": chunk_id,
                 "text": chunk_text,
