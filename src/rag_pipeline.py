@@ -2,13 +2,15 @@ from src.retriever import retrieve
 from src.generate import generate_answer
 
 
+NOT_FOUND_MESSAGE = "Information not found in the provided notes."
+
+
 def answer_question(question, index, chunks, top_k=3):
     """
-    Retrieve relevant chunks and generate an answer
-    for a single question.
+    Retrieve relevant chunks and generate an answer for a single question.
 
-    Returns the generated answer together with the
-    retrieved source evidence used to build the context.
+    If no sufficiently relevant source evidence is found, the LLM is not
+    called and the required not-found message is returned.
     """
 
     # =========================
@@ -23,17 +25,29 @@ def answer_question(question, index, chunks, top_k=3):
     )
 
     # =========================
-    # 2. BUILD CONTEXT
+    # 2. HANDLE NO EVIDENCE
+    # =========================
+
+    if not retrieved_chunks:
+        return {
+            "question": question,
+            "answer": NOT_FOUND_MESSAGE,
+            "sources": []
+        }
+
+    # =========================
+    # 3. BUILD CONTEXT
     # =========================
 
     context_parts = []
 
     for result in retrieved_chunks:
-
         context_parts.append(
             f"""
 SOURCE: {result['source']}
+SOURCE TYPE: {result['source_type']}
 PAGE: {result['page']}
+RELEVANCE: {result['relevance']:.4f}
 
 {result['text']}
 """
@@ -42,7 +56,7 @@ PAGE: {result['page']}
     context = "\n\n".join(context_parts)
 
     # =========================
-    # 3. GENERATE ANSWER
+    # 4. GENERATE ANSWER
     # =========================
 
     answer = generate_answer(
@@ -51,25 +65,24 @@ PAGE: {result['page']}
     )
 
     # =========================
-    # 4. EXTRACT SOURCE INFO
+    # 5. EXTRACT SOURCE INFO
     # =========================
 
     sources = []
 
     for result in retrieved_chunks:
-
-        source = {
+        sources.append({
             "file": result["source"],
             "page": result["page"],
             "chunk_id": result["chunk_id"],
+            "source_type": result["source_type"],
             "distance": result["distance"],
+            "relevance": result["relevance"],
             "text": result["text"]
-        }
-
-        sources.append(source)
+        })
 
     # =========================
-    # 5. RETURN STRUCTURED DATA
+    # 6. RETURN STRUCTURED DATA
     # =========================
 
     return {
