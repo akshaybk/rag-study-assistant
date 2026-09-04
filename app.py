@@ -70,8 +70,8 @@ else:
                     ocr_text_parts.append(extracted)
         except Exception as exc:
             st.error(
-                "Local OCR could not run. Make sure Tesseract OCR is installed. "
-                f"Details: {exc}"
+                "Local OCR could not run. Make sure Tesseract OCR is installed "
+                f"and available on PATH. Details: {exc}"
             )
             st.stop()
 
