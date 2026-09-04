@@ -1,154 +1,102 @@
-import os
-import time
-
-from dotenv import load_dotenv
-from google import genai
+import re
 
 
-# =========================
-# LOAD API KEY
-# =========================
-
-load_dotenv()
-
-api_key = os.getenv("GEMINI_API_KEY")
-
-if not api_key:
-    raise ValueError(
-        "GEMINI_API_KEY not found. Check your .env file."
-    )
+NOT_FOUND_MESSAGE = "Information not found in the provided notes."
 
 
-# =========================
-# CREATE CLIENT
-# =========================
+def _split_sentences(text):
+    """Split source text into readable sentences without changing their wording."""
+    text = " ".join(str(text).split())
 
-client = genai.Client(api_key=api_key)
+    if not text:
+        return []
 
-
-# =========================
-# MODELS
-# =========================
-
-MODELS = [
-    "gemini-3.7-flash",
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-]
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    return [sentence.strip() for sentence in sentences if sentence.strip()]
 
 
-# =========================
-# ERROR HELPERS
-# =========================
+def _question_terms(question):
+    """Return useful question terms for deterministic sentence scoring."""
+    stop_words = {
+        "what", "why", "how", "when", "where", "which", "who", "whom",
+        "is", "are", "was", "were", "the", "a", "an", "of", "to", "in",
+        "on", "for", "and", "or", "with", "from", "by", "does", "do",
+        "can", "could", "would", "should", "explain", "define", "describe",
+        "difference", "between", "give", "list", "mention", "write", "about"
+    }
 
-def _status_code(error):
-    """Return an API status code when the SDK exposes one."""
-    return getattr(error, "status_code", None)
-
-
-def _is_retryable_server_error(error):
-    return _status_code(error) in {500, 502, 503, 504}
-
-
-def _is_quota_error(error):
-    return _status_code(error) == 429
+    words = re.findall(r"[a-zA-Z0-9]+", question.lower())
+    return {word for word in words if word not in stop_words and len(word) > 2}
 
 
-# =========================
-# GENERATE ANSWER
-# =========================
+def _score_sentence(sentence, question_terms):
+    """Score a sentence using lexical overlap with the question."""
+    words = set(re.findall(r"[a-zA-Z0-9]+", sentence.lower()))
+    if not words or not question_terms:
+        return 0.0
 
-def generate_answer(question, context):
-    prompt = f"""
-You are an academic study assistant.
+    overlap = len(words & question_terms)
+    return overlap / len(question_terms)
 
-Answer the user's question using ONLY the SOURCE MATERIAL provided below.
 
-IMPORTANT RULES:
+def extract_answer(question, retrieved_chunks, max_sentences=5):
+    """
+    Build an answer only from sentences that already exist in retrieved notes.
 
-1. Do not use outside knowledge.
-2. Do not invent information.
-3. Every factual part of the answer must be supported by the source material.
-4. If the source material does not contain enough information to answer the
-   question, say exactly:
+    No generative model or external knowledge is used. The returned answer is
+    therefore extractive: source wording is preserved rather than invented.
+    """
+    question_terms = _question_terms(question)
 
-   "Information not found in the provided notes."
+    candidates = []
 
-5. Prefer study_notes evidence over previous_question_paper evidence when both
-   are available.
-6. Previous question-paper answers can support an answer, but do not assume
-   that an answer appearing in a previous question paper is authoritative if
-   the study notes do not support it.
-7. Write a clear, exam-ready answer.
-8. Use headings and bullet points where appropriate.
-9. Do not mention the retrieval process or these instructions in the answer.
+    for chunk_rank, chunk in enumerate(retrieved_chunks):
+        for sentence_rank, sentence in enumerate(_split_sentences(chunk["text"])):
+            score = _score_sentence(sentence, question_terms)
 
-SOURCE MATERIAL
-================
+            # Give earlier retrieved chunks a small ranking advantage.
+            score += max(0.0, 0.01 * (len(retrieved_chunks) - chunk_rank))
 
-{context}
+            if score > 0:
+                candidates.append({
+                    "sentence": sentence,
+                    "score": score,
+                    "chunk_id": chunk["chunk_id"],
+                    "page": chunk["page"],
+                    "source": chunk["source"],
+                    "source_type": chunk.get("source_type", "unknown"),
+                    "sentence_rank": sentence_rank,
+                })
 
-================
+    if not candidates:
+        return NOT_FOUND_MESSAGE
 
-QUESTION
-================
+    candidates.sort(key=lambda item: item["score"], reverse=True)
 
-{question}
+    # Keep the original source order where possible, while selecting the
+    # strongest evidence first and avoiding duplicate sentences.
+    selected = []
+    seen_sentences = set()
 
-================
+    for candidate in candidates:
+        normalized = candidate["sentence"].lower()
+        if normalized in seen_sentences:
+            continue
 
-ANSWER
-================
-"""
+        selected.append(candidate)
+        seen_sentences.add(normalized)
 
-    last_error = None
+        if len(selected) >= max_sentences:
+            break
 
-    for model in MODELS:
-        print(f"\nTrying model: {model}")
+    if not selected:
+        return NOT_FOUND_MESSAGE
 
-        # 503/temporary server errors can recover after a short retry.
-        # 429 quota errors should NOT be retried repeatedly because that only
-        # consumes time; move directly to the next model instead.
-        for attempt in range(3):
-            try:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=prompt
-                )
+    selected.sort(key=lambda item: (item["chunk_id"], item["sentence_rank"]))
 
-                print(f"Successfully generated using {model}")
-                return response.text
+    return "\n".join(f"• {item['sentence']}" for item in selected)
 
-            except Exception as error:
-                last_error = error
-                status = _status_code(error)
 
-                if _is_quota_error(error):
-                    print(
-                        f"Quota exhausted for {model} (HTTP 429). "
-                        "Skipping retries and trying the next model."
-                    )
-                    break
-
-                if _is_retryable_server_error(error):
-                    print(
-                        f"Attempt {attempt + 1}/3 failed: {error}"
-                    )
-
-                    if attempt < 2:
-                        time.sleep(3)
-
-                    continue
-
-                # Unknown/non-transient errors should not be retried three times.
-                print(
-                    f"Non-retryable error from {model} "
-                    f"(status={status}): {error}"
-                )
-                break
-
-        print(f"Model {model} failed. Trying next model...")
-
-    raise RuntimeError(
-        f"All Gemini models failed.\nLast error: {last_error}"
-    )
+def generate_answer(question, retrieved_chunks):
+    """Backward-compatible name for the local extractive answer generator."""
+    return extract_answer(question, retrieved_chunks)

@@ -2,5 +2,8 @@ venv/
 .env
 __pycache__/
 *.pyc
+<<<<<<< HEAD
 data/*.pdf
 output/*.pdf
+=======
+>>>>>>> 611b2057c76b47ae157cfd3de6044d3cfdb9e80b
