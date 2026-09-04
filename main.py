@@ -1,9 +1,6 @@
 from pathlib import Path
 
-from src.pdf_loader import load_pdf
-from src.chunker import chunk_pages
-from src.embeddings import create_embeddings
-from src.vector_store import create_vector_store
+from src.knowledge_base import build_knowledge_base
 from src.rag_pipeline import answer_question
 from src.pdf_generator import (
     generate_answers_pdf,
@@ -15,7 +12,7 @@ DATA_DIR = Path("data")
 
 
 # =========================
-# 1. LOAD SOURCE PDFs
+# 1. BUILD KNOWLEDGE BASE
 # =========================
 
 pdf_paths = sorted(DATA_DIR.glob("*.pdf"))
@@ -26,65 +23,45 @@ if not pdf_paths:
         "Add at least one source PDF to data/."
     )
 
+knowledge_base = build_knowledge_base(pdf_paths)
 
-all_pages = []
+pages = knowledge_base["pages"]
+chunks = knowledge_base["chunks"]
+embeddings = knowledge_base["embeddings"]
+index = knowledge_base["index"]
 
 for pdf_path in pdf_paths:
-    pages = load_pdf(str(pdf_path))
-    all_pages.extend(pages)
-    print(f"Loaded {len(pages)} pages from {pdf_path}")
+    page_count = sum(
+        1 for page in pages if Path(page["source"]).resolve() == pdf_path.resolve()
+    )
+    print(f"Loaded {page_count} pages from {pdf_path}")
 
 print(f"Total source PDFs: {len(pdf_paths)}")
-print(f"Total pages loaded: {len(all_pages)}")
-
-
-# =========================
-# 2. CREATE CHUNKS
-# =========================
-
-chunks = chunk_pages(all_pages)
-
+print(f"Total pages loaded: {len(pages)}")
 print(f"Created {len(chunks)} chunks")
-
-
-# =========================
-# 3. CREATE EMBEDDINGS
-# =========================
-
-embeddings = create_embeddings(chunks)
-
 print(f"Embedding shape: {embeddings.shape}")
-
-
-# =========================
-# 4. CREATE VECTOR STORE
-# =========================
-
-index = create_vector_store(embeddings)
-
 print(f"FAISS index contains {index.ntotal} vectors")
 
 
 # =========================
-# 5. QUESTIONS
+# 2. QUESTIONS
 # =========================
 
 questions = [
     "What is an algorithm?",
     "Why is algorithm efficiency important?",
     "What is the difference between linear search and binary search?",
-    "What is quantum computing?"
+    "What is quantum computing?",
 ]
 
 
 # =========================
-# 6. PROCESS QUESTIONS
+# 3. PROCESS QUESTIONS
 # =========================
 
 all_results = []
 
 for number, question in enumerate(questions, start=1):
-
     print("\n")
     print("=" * 70)
     print(f"QUESTION {number}")
@@ -95,7 +72,7 @@ for number, question in enumerate(questions, start=1):
         question,
         index,
         chunks,
-        top_k=3
+        top_k=3,
     )
 
     all_results.append(result)
@@ -114,7 +91,7 @@ for number, question in enumerate(questions, start=1):
 
 
 # =========================
-# 7. GENERATE PDF REPORTS
+# 4. GENERATE PDF REPORTS
 # =========================
 
 answers_pdf = generate_answers_pdf(all_results)
@@ -127,11 +104,6 @@ print("=" * 70)
 
 print(f"Answers PDF: {answers_pdf}")
 print(f"Source Mapping PDF: {source_mapping_pdf}")
-
-
-# =========================
-# 8. SUMMARY
-# =========================
 
 print("\n")
 print("=" * 70)
