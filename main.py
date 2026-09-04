@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from src.pdf_loader import load_pdf
 from src.chunker import chunk_pages
 from src.embeddings import create_embeddings
@@ -9,23 +11,38 @@ from src.pdf_generator import (
 )
 
 
-PDF_PATH = "data/notes.pdf"
+DATA_DIR = Path("data")
 
 
 # =========================
-# 1. LOAD PDF
+# 1. LOAD SOURCE PDFs
 # =========================
 
-pages = load_pdf(PDF_PATH)
+pdf_paths = sorted(DATA_DIR.glob("*.pdf"))
 
-print(f"Loaded {len(pages)} pages")
+if not pdf_paths:
+    raise FileNotFoundError(
+        "No PDF files found in the data folder. "
+        "Add at least one source PDF to data/."
+    )
+
+
+all_pages = []
+
+for pdf_path in pdf_paths:
+    pages = load_pdf(str(pdf_path))
+    all_pages.extend(pages)
+    print(f"Loaded {len(pages)} pages from {pdf_path}")
+
+print(f"Total source PDFs: {len(pdf_paths)}")
+print(f"Total pages loaded: {len(all_pages)}")
 
 
 # =========================
 # 2. CREATE CHUNKS
 # =========================
 
-chunks = chunk_pages(pages)
+chunks = chunk_pages(all_pages)
 
 print(f"Created {len(chunks)} chunks")
 
@@ -65,7 +82,6 @@ questions = [
 
 all_results = []
 
-
 for number, question in enumerate(questions, start=1):
 
     print("\n")
@@ -89,7 +105,6 @@ for number, question in enumerate(questions, start=1):
     print("\nSOURCES:")
 
     for source in result["sources"]:
-
         print(
             f"  {source['file']} "
             f"→ Page {source['page']} "
