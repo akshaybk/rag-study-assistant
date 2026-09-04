@@ -70,8 +70,8 @@ else:
                     ocr_text_parts.append(extracted)
         except Exception as exc:
             st.error(
-                "Local OCR could not run. Make sure Tesseract OCR is installed "
-                f"and available on PATH. Details: {exc}"
+                "Local OCR could not run. Make sure Tesseract OCR is installed. "
+                f"Details: {exc}"
             )
             st.stop()
 
@@ -139,7 +139,7 @@ if st.button(
                         question,
                         index,
                         chunks,
-                        top_k=3,
+                        top_k=6,
                     )
                 )
             status.update(label="Answers generated", state="complete")
