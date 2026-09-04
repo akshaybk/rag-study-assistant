@@ -16,6 +16,8 @@ class FakeEmbeddingModel:
                 float("binary" in lowered),
                 float("linear" in lowered),
                 float("structure" in lowered),
+                float("prime" in lowered),
+                float("dictionary" in lowered),
                 float("unrelated" in lowered),
             ], dtype="float32")
             norm = np.linalg.norm(vector)
@@ -75,7 +77,7 @@ def test_question_paper_heading_is_not_returned_as_answer(monkeypatch):
             "chunk_id": 33,
             "page": 12,
             "source": "notes.pdf",
-            "source_type": "previous_question_paper",
+            "source_type": "study_notes",
             "text": (
                 "Q2 — What is a structure in C++? "
                 "A structure (struct) is a user-defined data type."
@@ -103,6 +105,79 @@ def test_question_paper_heading_is_not_returned_as_answer(monkeypatch):
     assert "Q9 — Structures vs Classes in C++" not in answer
     assert "A structure (struct) is a user-defined data type." in answer
     assert all(not item["sentence"].startswith("Q") for item in evidence)
+
+
+def test_previous_question_paper_is_not_used_as_evidence(monkeypatch):
+    monkeypatch.setattr(generate, "model", FakeEmbeddingModel())
+
+    chunks = [
+        {
+            "chunk_id": 1,
+            "page": 4,
+            "source": "old-paper.pdf",
+            "source_type": "previous_question_paper",
+            "text": "An algorithm is a finite sequence of clear instructions.",
+        },
+        {
+            "chunk_id": 2,
+            "page": 8,
+            "source": "notes.pdf",
+            "source_type": "study_notes",
+            "text": "An algorithm is a step-by-step procedure for solving a problem.",
+        },
+    ]
+
+    answer, evidence = generate.extract_answer_with_evidence(
+        "What is an algorithm?",
+        chunks,
+        max_sentences=2,
+    )
+
+    assert "old-paper.pdf" not in answer
+    assert all(item["source_type"] == "study_notes" for item in evidence)
+    assert "step-by-step procedure" in answer
+
+
+def test_multi_part_question_is_answered_independently(monkeypatch):
+    monkeypatch.setattr(generate, "model", FakeEmbeddingModel())
+
+    chunks = [
+        {
+            "chunk_id": 1,
+            "page": 10,
+            "source": "notes.pdf",
+            "source_type": "study_notes",
+            "text": "A prime number is divisible only by one and itself.",
+        },
+        {
+            "chunk_id": 2,
+            "page": 14,
+            "source": "notes.pdf",
+            "source_type": "study_notes",
+            "text": "A dictionary stores key-value pairs for lookup.",
+        },
+    ]
+
+    question = "a) Define a prime number. (6) b) Explain a dictionary. (6)"
+    answer, evidence = generate.extract_answer_with_evidence(
+        question,
+        chunks,
+        max_sentences=2,
+    )
+
+    assert "a)" in answer
+    assert "b)" in answer
+    assert "prime number" in answer
+    assert "dictionary" in answer
+    assert len(evidence) == 2
+
+
+def test_split_subquestions():
+    question = "a) What is a prime number? (6) b) Explain a dictionary. (6)"
+    assert generate.split_subquestions(question) == [
+        ("a", "What is a prime number? (6)"),
+        ("b", "Explain a dictionary. (6)"),
+    ]
 
 
 def test_comparison_prefers_sentence_containing_both_terms(monkeypatch):
