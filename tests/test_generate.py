@@ -66,6 +66,44 @@ def test_answer_uses_source_sentence_and_returns_exact_evidence(monkeypatch):
     assert evidence[0]["chunk_id"] == 7
 
 
+def test_question_paper_heading_is_not_returned_as_answer(monkeypatch):
+    monkeypatch.setattr(generate, "model", FakeEmbeddingModel())
+
+    chunks = [
+        {
+            "chunk_id": 33,
+            "page": 12,
+            "source": "notes.pdf",
+            "source_type": "previous_question_paper",
+            "text": (
+                "Q2 — What is a structure in C++? "
+                "A structure (struct) is a user-defined data type."
+            ),
+        },
+        {
+            "chunk_id": 38,
+            "page": 13,
+            "source": "notes.pdf",
+            "source_type": "study_notes",
+            "text": (
+                "Q9 — Structures vs Classes in C++ Structure Class "
+                "Declared using struct Declared using class."
+            ),
+        },
+    ]
+
+    answer, evidence = generate.extract_answer_with_evidence(
+        "What is a structure?",
+        chunks,
+        max_sentences=3,
+    )
+
+    assert "Q2 — What is a structure in C++?" not in answer
+    assert "Q9 — Structures vs Classes in C++" not in answer
+    assert "A structure (struct) is a user-defined data type." in answer
+    assert all(not item["sentence"].startswith("Q") for item in evidence)
+
+
 def test_comparison_prefers_sentence_containing_both_terms(monkeypatch):
     monkeypatch.setattr(generate, "model", FakeEmbeddingModel())
 
